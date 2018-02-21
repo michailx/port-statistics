@@ -1,0 +1,18 @@
+{
+  "apps" : {
+    "org.onosproject.port-statistics" : {
+      "prediction" : {
+        "ingressPoints" : [
+          {
+            "ingressSwitch" : "of:000000223d4b0182",
+            "ingressPort"   : 0
+          },
+          {
+            "ingressSwitch" : "of:000000223d4b0182",
+            "ingressPort"   : 1
+          }
+        ]
+      }
+    }
+  }
+}
