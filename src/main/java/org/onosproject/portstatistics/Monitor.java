@@ -77,6 +77,8 @@ public class Monitor {
 
     private final InternalNetworkConfigListener netcfgListener = new InternalNetworkConfigListener();
 
+    private ArrayList<IngressPoint> ingressPoints;
+
     private final ConfigFactory<ApplicationId, MonitorConfig> monitorConfigFactory =
             new ConfigFactory<ApplicationId, MonitorConfig>(
                     SubjectFactories.APP_SUBJECT_FACTORY,
@@ -185,32 +187,54 @@ public class Monitor {
             log.info("NetworkConfigListener " + event.configClass().getClass().getName());
             log.info("Event Type: " + event.type());
             if (event.type() == NetworkConfigEvent.Type.CONFIG_ADDED) {
-                Iterator<Map.Entry<String, JsonNode>> ingressPoints = ((MonitorConfig) event.config().get()).getIngressPoints();
-                while (ingressPoints.hasNext()) {
-                	log.info("LOL");
-			    	Map.Entry<String, JsonNode> ingPoint = ingressPoints.next();
-    				log.info(ingPoint.getKey() + ":" + ingPoint.getValue());
- 				}
+                ingressPoints = ((MonitorConfig) event.config().get()).getIngressPoints();
+
+            	for (IngressPoint ingressPoint: ingressPoints){
+            		log.info("Switch: " + ingressPoint.getDeviceId() + " Port: " + ingressPoint.getPortId());
+            	}
             }
         }
     }
 
-    public class MonitorConfig extends Config<ApplicationId> {
+    private class MonitorConfig extends Config<ApplicationId> {
 
-    	public Iterator<Map.Entry<String, JsonNode>> getIngressPoints(){
+    	public ArrayList<IngressPoint> getIngressPoints(){
+    		ArrayList<IngressPoint> ingressPoints = new ArrayList<IngressPoint>();
+
         	ArrayNode parent = (ArrayNode) object.path("ingressPoints");
         	if (parent.isMissingNode()) {
             	return null;
         	} else {
-        		log.info("To String:" + parent.toString() + " -- " + parent.getNodeType().toString());
+        		// log.info("To String:" + parent.toString() + " -- " + parent.getNodeType().toString());
         		Iterator<JsonNode> children = parent.elements();
         		while (children.hasNext()){
         			JsonNode childNode = children.next();
-					log.info(childNode.get("ingressSwitch").asText() + " -- " + childNode.get("ingressPort").asInt());
+					// log.info(childNode.get("ingressSwitch").asText() + " -- " + childNode.get("ingressPort").asInt());
+					log.info(childNode.get("ingressSwitch").asText() + " -- " + childNode.get("ingressPort").asText());
+					ingressPoints.add(new IngressPoint(childNode.get("ingressSwitch").asText(), childNode.get("ingressPort").asText()));
         		}
 
-        		return parent.fields();
+        		return ingressPoints;
         	}
+    	}
+    }
+
+    private class IngressPoint {
+
+    	private String device_id;
+    	private String port_id;
+
+    	IngressPoint(String device_id, String port_id){
+    		this.device_id = device_id;
+    		this.port_id = port_id;
+    	}
+
+    	private String getDeviceId(){
+    		return this.device_id;
+    	}
+
+    	private String getPortId(){
+    		return this.port_id;
     	}
     }
 
