@@ -10,6 +10,10 @@
           {
             "ingressSwitch" : "of:000000223d4b0182",
             "ingressPort"   : 1
+          },
+          {
+            "ingressSwitch" : "of:0000000000000001",
+            "ingressPort"   : 2
           }
         ]
       }

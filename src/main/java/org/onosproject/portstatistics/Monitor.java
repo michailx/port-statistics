@@ -24,7 +24,9 @@ import org.apache.felix.scr.annotations.Service;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.net.Device;
+import org.onosproject.net.DeviceId;
 import org.onosproject.net.Port;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.device.PortStatistics;
 import org.slf4j.Logger;
@@ -34,6 +36,7 @@ import java.util.Iterator;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.Collections;
 import java.util.*;
 import org.influxdb.InfluxDB;
 import org.influxdb.InfluxDB.ConsistencyLevel;
@@ -77,7 +80,7 @@ public class Monitor {
 
     private final InternalNetworkConfigListener netcfgListener = new InternalNetworkConfigListener();
 
-    private ArrayList<IngressPoint> ingressPoints;
+    private List<IngressPoint> ingressPoints = Collections.synchronizedList(new ArrayList<IngressPoint>());
 
     private final ConfigFactory<ApplicationId, MonitorConfig> monitorConfigFactory =
             new ConfigFactory<ApplicationId, MonitorConfig>(
@@ -105,7 +108,7 @@ public class Monitor {
         ses.scheduleWithFixedDelay(new Runnable() {
             @Override
             public void run() {
-                getMonitorData();
+                storeMonitorData();
             }
         }, 1, 5, TimeUnit.SECONDS); // 5 seconds interval
     }
@@ -119,27 +122,39 @@ public class Monitor {
         netcfgRegistry.unregisterConfigFactory(monitorConfigFactory);
     }
 
-    private void getMonitorData() {
-        Iterable<Device> devices = deviceService.getDevices();
+    private void storeMonitorData() {
 
-        for(Device d : devices)
-        {
-            log.info(PRINT_LEGEND + "########## Device id " + d.id().toString() + "##########");
+    	for (IngressPoint ingressPoint: ingressPoints){
 
-            List<Port> ports = deviceService.getPorts(d.id());
+			DeviceId deviceId = DeviceId.deviceId(ingressPoint.getDeviceId());
+    		// Need to check if the device and port combo exists, otherwise code execution hangs:
+			if (!deviceService.isAvailable(deviceId)){
+				continue;
+			}
+
+            // log.info("Switch: " + ingressPoint.getDeviceId() + " Port: " + ingressPoint.getPortId());
+            Device ingDevice = deviceService.getDevice(deviceId);
+
+            List<Port> ports = deviceService.getPorts(ingDevice.id());
             for(Port port : ports)
             {
-                PortStatistics portstat = deviceService.getStatisticsForPort(d.id(), port.number());
-                
+            	if ( !Objects.equals(port.number().toString(), ingressPoint.getPortId()) ) {
+            		// Not interested in this port
+            		continue;
+            	}
+
+                PortStatistics portstat = deviceService.getStatisticsForPort(deviceId, port.number());
+                log.info(PRINT_LEGEND + "(Device, Port): (" + deviceId.toString() + ", "+ port.number() + ")");
+
                 if(portstat != null) {
-                    log.info(PRINT_LEGEND + "Port " + port.number() + ">> Bytes, Rx: " + portstat.bytesReceived() + ", Tx: " + portstat.bytesSent());
-                    insertIntoInfluxDB(d.id().toString(), port.number().toString(), portstat.bytesReceived(), portstat.bytesSent());
+                    log.info(PRINT_LEGEND + ">> Bytes, Rx: " + portstat.bytesReceived() + ", Tx: " + portstat.bytesSent());
+                    insertIntoInfluxDB(deviceId.toString(), port.number().toString(), portstat.bytesReceived(), portstat.bytesSent());
                 }
                 else
-                    log.info(PRINT_LEGEND + "Port " + port.number() + ">> unable to read portStats!");
+                    log.info(PRINT_LEGEND + ">> unable to read portStats!");
 
             }
-        }
+        } 
     }
 
     private void connectToInfluxDB() {
@@ -198,8 +213,8 @@ public class Monitor {
 
     private class MonitorConfig extends Config<ApplicationId> {
 
-    	public ArrayList<IngressPoint> getIngressPoints(){
-    		ArrayList<IngressPoint> ingressPoints = new ArrayList<IngressPoint>();
+    	public List<IngressPoint> getIngressPoints(){
+    		List<IngressPoint> ingressPoints = Collections.synchronizedList(new ArrayList<IngressPoint>());
 
         	ArrayNode parent = (ArrayNode) object.path("ingressPoints");
         	if (parent.isMissingNode()) {
